@@ -73,24 +73,24 @@ ClientConnection::~ClientConnection() {
 
 
 int connect_TCP( uint32_t address,  uint16_t  port) {
-    struct sockaddr_in sin;
-    struct hostent *hent;
-    int s;
+  struct sockaddr_in sin;
+  memset(&sin, 0, sizeof(sin));
+  sin.sin_family = AF_INET;
+  sin.sin_port = htons(port); 
+  sin.sin_addr.s_addr = htonl(address);
 
-    memset(&sin, 0, sizeof(sin));
-    sin.sin_family = AF_INET;
-    sin.sin_port = htons(port);
-
-    memcpy(&sin.sin_addr, &address, sizeof(address));
-
-    s = socket(AF_INET, SOCK_STREAM, 0);
-
-    if(s < 0)
-       errexit("No se puede crear el socket: %s\n", strerror(errno));
-    if(connect(s, (struct sockaddr *)&sin, sizeof(sin)) < 0)
-       errexit("No se puede conectar con %s: %s\n", address, strerror(errno));
-
-    return s;
+  int data_socket = socket(AF_INET, SOCK_STREAM, 0);
+  if (data_socket < 0) {
+    std::string msg_error = "Error al crear socket de datos " + std::string(strerror(errno));
+    throw std::logic_error(msg_error);
+  }
+  std::cout << "port -> " << port << "\n";
+  std::cout << "address -> " << address << "\n";
+  if (connect(data_socket, (struct sockaddr*)&sin, sizeof(sin)) < 0) {
+    std::string msg_error = "Error al conectar " + std::string(strerror(errno));
+    throw std::logic_error(msg_error);
+  }
+  return data_socket;
 
 }
 
@@ -112,12 +112,6 @@ void ClientConnection::stop() {
 
     
 #define COMMAND(cmd) strcmp(command, cmd)==0
-
-// This method processes the requests.
-// Here you should implement the actions related to the FTP commands.
-// See the example for the USER command.
-// If you think that you have to add other commands feel free to do so. You 
-// are allowed to add auxiliary methods if necessary.
 
 void ClientConnection::WaitForRequests() {
     if (!ok) {
@@ -183,7 +177,7 @@ void ClientConnection::WaitForRequests() {
 
         fprintf(fd, "150 FIle status okay; about to open data connection. \n");
         fflush(fd);
-        FILE *f = fopen(arg, "wb+");
+        FILE *f = fopen(arg, "w");
 
         if(f == NULL){
           fprintf(fd, "425 Can't open data connection. \n");
@@ -198,11 +192,12 @@ void ClientConnection::WaitForRequests() {
         fflush(fd);
 
         while(1){
-          int b = recv(data_socket, buffer, MAX_BUFF, 0);
-          fwrite(buffer, 1, b, f);
-          if(b == 0){
+          char buffer[MAX_BUFF];
+          size_t bytes_read = read(data_socket, buffer, MAX_BUFF); // Lee los datos que se enviaron por el socket y los guarda en el buffer
+          if (bytes_read == 0) {
             break;
           }
+          fwrite(buffer, 1, bytes_read, f);
         }
 
         fprintf(fd, "226 Closing data connection. \n");
@@ -213,7 +208,7 @@ void ClientConnection::WaitForRequests() {
       else if (COMMAND("RETR")) {
         fscanf(fd, "%s", arg);
 
-        FILE *f = fopen(arg, "rb"); // LECTURA NORMAL O BINARIO
+        FILE *f = fopen(arg, "r");
 
         if(f != NULL){
           fprintf(fd, "125 Data connection already open; transfer starting. \n");
@@ -221,12 +216,12 @@ void ClientConnection::WaitForRequests() {
           char *buffer[MAX_BUFF];
 
           while(1){
-            int b = fread(buffer, 1, MAX_BUFF, f);
-
-            send(data_socket, buffer, b, 0);
-            if(b < MAX_BUFF){
+            char buffer[MAX_BUFF];
+            size_t bytes_read = fread(buffer, 1, MAX_BUFF, f); // Lee los datos del archivo y los guarda en el buffer
+            if (bytes_read == 0) { // Si se leyeron 0 bytes, no queda nada por leer en el archivo
               break;
             }
+            write(data_socket, buffer, bytes_read); // Escribe los datos en el socket, es decir, los envía al cliente
           }
           fprintf(fd, "226 Closing data connection. \n");
           fflush(fd);
