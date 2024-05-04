@@ -148,40 +148,37 @@ void ClientConnection::WaitForRequests() {
 	   
       }
       else if (COMMAND("PORT")) {
-	  // To be implemented by students
+        int a1, a2, a3, a4;
+        int p1, p2;
+
+        std::cout << "PRE READ PORT INFO\n";
+        fscanf(this->fd, "%d,%d,%d,%d,%d,%d", &a1, &a2, &a3, &a4, &p1, &p2);
+        std::cout << "address: " << a1 << "." << a2 << "." << a3 << "." << a4 << std::endl;
+        
+        uint32_t address = (a1 << 24) | (a2 << 16) | (a3 << 8) | a4;
+        uint16_t port = (p1 << 8) | p2;
+        
+        std::cout << "PRE CONNECT_TCP\n";
+        std::cout << "Address ->" << address << " Port -> " << port << "\n";
+        this->data_socket = connect_TCP(address, port);
+       
+        fprintf(this->fd, "200 OK\n");
+        fflush(this->fd);
       }
       else if (COMMAND("PASV")) {
-        int s = define_socket_TCP(0);
-
-        struct sockaddr_in addr;
-        socklen_t len = sizeof(addr);
-
-        int result = getsockname(s, (struct sockaddr*)&addr, &len);
-
-        uint16_t pp = addr.sin_port;
-        int p1 = (pp >> 8) & 0xFF;
-        int p2 = pp & 0xFF;
-
-        if(result < 0){
-          fprintf(fd, "421 Service not available, closing connection. \n");
-          fflush(fd);
-          return;
-        }
-
-        fprintf(fd, "227 Entering Passive Mode (127,0,0,1,%d,%d)\n", p1, p2);
-
-        len = sizeof(addr);
-        fflush(fd);
-        result = accept(s, (struct sockaddr*)&addr, &len);
-
-        if(result < 0){
-          fprintf(fd, "421 Service not available, closing control connection. \n");
-          fflush(fd);
-          return;
-        }
-        data_socket = result;
-      }
-      else if (COMMAND("STOR") ) {
+        
+        struct sockaddr_in fsin;
+        socklen_t slen = sizeof(fsin);
+        int s = define_socket_TCP(0); // Se define un socket en un puerto aleatorio libre en el sistema
+        getsockname(s, (sockaddr*)&fsin, &slen);
+        int port = ntohs(fsin.sin_port); // obtenemos el puerto
+        int p1 = port / 256;
+        int p2 = port % 256;
+        fprintf(fd, "227 Entering Passive Mode (127,0,0,1,%d,%d)\n", p1, p2); // enviamos ip y puerto en el formato adecuado
+        fflush(this->fd);
+        data_socket = accept(s, (struct sockaddr*)&fsin, &slen);
+  
+      }else if (COMMAND("STOR") ) {
         fscanf(fd, "%s", arg);
 
         fprintf(fd, "150 FIle status okay; about to open data connection. \n");
@@ -243,30 +240,31 @@ void ClientConnection::WaitForRequests() {
         }
       }
       else if (COMMAND("LIST")) {
-	      // To be implemented by students	
-        /* 
-        opendir     
-        readdir    
-        closedir
-
-        DIR* = opendir("...")
-        fprintf(fd, ...)
-        while (e = readdir(d)){
-          // habrá que hacer conversion de datos para que send funcione correctamente
-          send(data_socket, e->d_name, strlen(e-> d_name), 0)
+        DIR* d = opendir(".");
+        fprintf(fd, "125 List started OK.\n");
+        fflush(fd);
+        struct dirent* entry;
+        FILE* data_file = fdopen(this->data_socket, "wb");
+        while ((entry = readdir(d)) != NULL) { // Mientras obtengamos un nombre de archivo/directorio
+          std::string dir_name(entry->d_name);
+          if (!(dir_name == "." || dir_name == "..")) {
+            dir_name += "\x0d\x0a";
+            fwrite(dir_name.c_str(), 1, dir_name.length(), data_file);      
+          }
         }
-        fprintf(fd, ...)
-        closedir(d)
-        cerrar data_socket
-        */
+        fflush(data_file);
+        close(data_socket);
+        closedir(d);
+        fprintf(fd, "250 List completed succesfully.\n");
+        fflush(fd);
       }
       else if (COMMAND("SYST")) {
            fprintf(fd, "215 UNIX Type: L8.\n");   
       }
 
       else if (COMMAND("TYPE")) {
-	  fscanf(fd, "%s", arg);
-	  fprintf(fd, "200 OK\n");   
+	    fscanf(fd, "%s", arg);
+	    fprintf(fd, "200 OK\n");   
       }
      
       else if (COMMAND("QUIT")) {
