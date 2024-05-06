@@ -73,6 +73,7 @@ ClientConnection::~ClientConnection() {
 
 
 int connect_TCP( uint32_t address,  uint16_t  port) {
+  
   struct sockaddr_in sin;
   memset(&sin, 0, sizeof(sin));
   sin.sin_family = AF_INET;
@@ -80,16 +81,20 @@ int connect_TCP( uint32_t address,  uint16_t  port) {
   sin.sin_addr.s_addr = htonl(address);
 
   int data_socket = socket(AF_INET, SOCK_STREAM, 0);
+  
   if (data_socket < 0) {
     std::string msg_error = "Error al crear socket de datos " + std::string(strerror(errno));
     throw std::logic_error(msg_error);
   }
+  
   std::cout << "port -> " << port << "\n";
   std::cout << "address -> " << address << "\n";
+  
   if (connect(data_socket, (struct sockaddr*)&sin, sizeof(sin)) < 0) {
     std::string msg_error = "Error al conectar " + std::string(strerror(errno));
     throw std::logic_error(msg_error);
   }
+
   return data_socket;
 
 }

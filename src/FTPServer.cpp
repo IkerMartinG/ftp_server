@@ -30,7 +30,7 @@
 
 
 int define_socket_TCP(int port) {
-    // Include the code for defining the socket.
+
     struct sockaddr_in sin;
     int s;
 
